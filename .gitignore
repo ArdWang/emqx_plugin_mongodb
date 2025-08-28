@@ -21,3 +21,4 @@ test/ct.cover.spec
 rebar3.crashdump
 rebar3
 /*.iml
+emqx_plugin_mongodb.hocon
