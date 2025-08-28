@@ -200,7 +200,24 @@ with_log_at_error(Fun, Log) ->
 do_send_msg(Pid, Querys, Message) ->
     lists:foreach(
         fun({_, Collection}) ->
-            mongo_api:insert(Pid, Collection, Message)
+            %% 确保集合名是二进制格式
+            CollectionBin = case is_list(Collection) of
+                                true -> list_to_binary(Collection);
+                                false -> Collection
+                            end,
+
+            %% 检查消息中是否包含_id字段
+            case maps:find(<<"_id">>, Message) of
+                {ok, IdValue} ->
+                    %% 如果包含_id，则执行更新操作（upsert）
+                    Filter = #{<<"_id">> => IdValue},
+                    Update = #{<<"$set">> => Message},
+                    Options = #{upsert => true},
+                    mongo_api:update(Pid, CollectionBin, Filter, Update, Options);
+                error ->
+                    %% 如果不包含_id，则执行插入操作
+                    mongo_api:insert(Pid, CollectionBin, Message)
+            end
         end,
         Querys
     ).

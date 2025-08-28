@@ -4,6 +4,8 @@ Mongodb plugin for EMQX >= V5.4.0
 
 ## Usage
 
+When using it, be sure to remember that the addition of.tool-versions cannot exceed 26 and 3.20
+
 ### Release
 
 ```shell
