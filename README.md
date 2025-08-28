@@ -12,7 +12,7 @@ When using it, be sure to remember that the addition of.tool-versions cannot exc
 > git clone https://github.com/ArdWang/emqx_plugin_mongodb.git
 > cd emqx_plugin_mongodb
 > make rel
-_build/default/emqx_plugrel/emqx_plugin_mongodb-<vsn>.tar.gz
+_build/default/emqx_plugrel/emqx_plugin_mongodb-0.0.1.tar.gz
 ```
 
 ### Config
