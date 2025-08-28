@@ -9,7 +9,7 @@ When using it, be sure to remember that the addition of.tool-versions cannot exc
 ### Release
 
 ```shell
-> git clone https://github.com/jostar-y/emqx_plugin_mongodb.git
+> git clone https://github.com/ArdWang/emqx_plugin_mongodb.git
 > cd emqx_plugin_mongodb
 > make rel
 _build/default/emqx_plugrel/emqx_plugin_mongodb-<vsn>.tar.gz
