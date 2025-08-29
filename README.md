@@ -15,7 +15,7 @@ When using it, be sure to remember that the addition of.tool-versions cannot exc
 _build/default/emqx_plugrel/emqx_plugin_mongodb-0.0.1.tar.gz
 ```
 
-### operation
+### Operation
 
 
 <img width="1087" height="597" alt="截屏2025-08-29 14 34 29" src="https://github.com/user-attachments/assets/ea8d589a-4f00-41d7-9d20-86c732626d11" />
