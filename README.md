@@ -11,9 +11,16 @@ When using it, be sure to remember that the addition of.tool-versions cannot exc
 ```shell
 > git clone https://github.com/ArdWang/emqx_plugin_mongodb.git
 > cd emqx_plugin_mongodb
-> make rel
-_build/default/emqx_plugrel/emqx_plugin_mongodb-0.0.1.tar.gz
+> make rel _build/default/emqx_plugrel/emqx_plugin_mongodb-0.0.1.tar.gz
 ```
+
+### Operation
+
+
+<img width="1087" height="597" alt="截屏2025-08-29 14 34 29" src="https://github.com/user-attachments/assets/ea8d589a-4f00-41d7-9d20-86c732626d11" />
+<img width="1075" height="693" alt="截屏2025-08-29 14 34 47" src="https://github.com/user-attachments/assets/e801c86d-757c-40d3-9ffb-40f65a65ef14" />
+<img width="1287" height="896" alt="截屏2025-08-29 14 35 11" src="https://github.com/user-attachments/assets/7a410b6e-17f3-4309-a31b-e0f7f769f754" />
+
 
 ### Config
 
