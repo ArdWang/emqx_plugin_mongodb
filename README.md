@@ -89,6 +89,84 @@ Some examples in the directory `priv/example/`.
 - Default path： `emqx/etc/emqx_plugin_mongodb.hocon`
 - Attach to path:  set system environment variables  `export EMQX_PLUGIN_MONGODB_CONF="absolute_path"`
 
+config
+
+```
+plugin_mongodb {
+  connection {
+    mongo_type = single
+    bootstrap_hosts = ["xx.xx.xx.xx:27017"]
+    database = "hygro_test"
+    username = "xxx"
+    password = "xxx"
+    topology {
+      max_overflow = 10
+      connect_timeout_ms = 3s
+      server_selection_timeout_ms = 20s
+    }
+    health_check_interval = 20s
+  }
+
+  topics = [
+    {
+      name = telemetry_topic,
+      filter = "hygro/deviceTelemetry/#",
+      collection = "placeholder"  # 明确指定status集合名称	
+    },
+    {
+      name = status_topic,
+      filter = "hygro/deviceStatus/#",
+      collection = "placeholder"  # 明确指定status集合名称	
+    },
+    {
+      name: sys_topic,
+      filter: "$SYS/#",
+      collection: "placeholder"  # 指定存储到telemetry集合
+    }
+  ]
+}
+```
+data
+
+```js
+
+hygro/deviceStatus/xxxxb8aff43c
+hygro/deviceTelemetry/xxxb8aff43c
+
+{"name":"xxxxb8afea0a","ct":29.9,"ch":69.8,"ctc":1.5,"chc":3.0,"time":1718868312}
+
+```
+
+
+```js
+temeletry
+{
+  "_id": 1727334567,
+  "name": "xxxb8aff30a",
+  "time": 1727334567,
+  "ct": 33.2,
+  "ch": 56.7,
+  "chc": 0,
+  "ctc": 0
+  }
+
+status
+{
+    "_id": "xxxaff30a"
+    "username": "202412200818",
+    "flags":{
+    "dup":false,
+        "retain": false
+},
+    "qos":1,
+    "topic":"test/t1/mongo",
+    "peerhost":"127.0.0.1",
+    "publish_reveived_at":1754984956681
+}
+  
+```
+
+
 #### Reload
 
 ```shell
