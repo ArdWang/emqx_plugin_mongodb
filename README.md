@@ -6,6 +6,8 @@ Mongodb plugin for EMQX >= V5.4.0
 
 When using it, be sure to remember that the addition of.tool-versions cannot exceed 26 and 3.20
 
+replica set name must be "rs0", this is very important, otherwise the plugin will not work.
+
 ### Release
 
 The version compiled by emqx_plugrel/emqx_plugin_mongodb-0.0.1.tar.gz is not subject to any restrictions or influences.
@@ -128,6 +130,43 @@ plugin_mongodb {
     }
   ]
 }
+plugin_mongodb {
+  connection {
+    mongo_type = rs
+    bootstrap_hosts = ["x.x.x.x:27017","x.x.x.x:27018","x.x.x.x:27019"]
+    replica_set_name = "rs0"
+    database = "xx"
+    username = "xx"
+    password = "xx"
+    topology {
+      max_overflow = 10
+      #connect_timeout_ms = 3s
+      #server_selection_timeout_ms = 20s
+      wait_queue_timeout_ms = 1s
+      heartbeat_frequency_ms = 10s
+    }
+    health_check_interval = 20s
+  }
+
+  topics = [
+    {
+      name = telemetry_topic,
+      filter = "hygro/deviceTelemetry/#",
+      collection = "placeholder"  # 明确指定status集合名称	
+    },
+    {
+      name = status_topic,
+      filter = "hygro/deviceStatus/#",
+      collection = "placeholder"  # 明确指定status集合名称	
+    },
+    {
+      name: sys_topic,
+      filter: "$SYS/#",
+      collection: "placeholder"  # 指定存储到other集合
+    }
+  ]
+}
+
 ```
 data
 
