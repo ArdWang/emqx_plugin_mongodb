@@ -8,6 +8,9 @@ When using it, be sure to remember that the addition of.tool-versions cannot exc
 
 ### Release
 
+The version compiled by emqx_plugrel/emqx_plugin_mongodb-0.0.1.tar.gz is not subject to any restrictions or influences.
+He will automatically read {relx, [{release, {emqx_plugin_mongodb, "0.2.4"} in rebar.config.
+
 ```shell
 > git clone https://github.com/ArdWang/emqx_plugin_mongodb.git
 > cd emqx_plugin_mongodb
