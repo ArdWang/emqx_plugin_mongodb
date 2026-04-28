@@ -16,7 +16,7 @@
 -export([eventmsg_publish/1]).
 
 load() ->
-  _ = ets:new(?PLUGIN_MONGODB_TAB, [named_table, public, set, {keypos, 1}, {read_concurrency, true}]),
+  ensure_ets_table(),
   load(read_config()).
 
 load(#{connection := Connection, topics := Topics}) ->
@@ -37,38 +37,7 @@ on_message_publish(Message = #message{topic = Topic}) ->
       }),
       spawn(fun() ->
         try
-          %% 根据topic前缀选择handler
-%%          case binary:match(Topic, <<"$SYS/">>) of
-%%            {0, _} ->
-%%              %% 对于$SYS/系统主题，存储到system集合
-%%              StatusData = eventmsg_publish_status(Message),
-%%              %% 使用固定的system作为集合名
-%%              SystemQuerys = update_collection_names(Querys, <<"system">>),
-%%              query(StatusData, SystemQuerys);
-%%            _ ->
-              case binary:match(Topic, <<"hygro/deviceTelemetry/">>) of
-                {0, _} ->
-                  %% 对于hygro/deviceTelemetry/主题，从topic中提取设备名作为集合名
-                  TelemetryData = eventmsg_publish_telemetry(Message),
-                  %% 从topic中提取设备名作为集合名
-                  DeviceName = extract_device_name_from_topic(Topic),
-                  %% 将查询中的集合名替换为动态的设备名
-                  DynamicQuerys = update_collection_names(Querys, DeviceName),
-                  query(TelemetryData, DynamicQuerys);
-                _ ->
-                  case binary:match(Topic, <<"hygro/deviceStatus/">>) of
-                    {0, _} ->
-                      %% 对于hygro/deviceStatus/主题，处理状态数据
-                      StatusData = eventmsg_publish_device_status(Message),
-                      %% 使用固定的status作为集合名
-                      DynamicQuerys = update_collection_names(Querys, <<"status">>),
-                      query(StatusData, DynamicQuerys);
-                    %% 其他主题不存储任何数据
-                    _ ->
-                      ok
-                  end
-              end
-%%          end
+          handle_matched_message(Message, Topic, Querys)
         catch
           Error:Reason ->
             ?SLOG(error, #{
@@ -78,7 +47,7 @@ on_message_publish(Message = #message{topic = Topic}) ->
               message => Message
             })
         end
-            end);
+      end);
     {true, []} ->
       %% 匹配到了规则但没有查询（可能是空列表），不执行任何操作
       ok;
@@ -87,6 +56,27 @@ on_message_publish(Message = #message{topic = Topic}) ->
       ok
   end,
   {ok, Message}.
+
+%% 根据topic前缀处理消息
+handle_matched_message(Message, Topic, Querys) ->
+  case binary:match(Topic, <<"device/telemetry/">>) of
+    {0, _} ->
+      TelemetryData = eventmsg_publish_telemetry(Message),
+      DeviceName = extract_device_name_from_topic(Topic),
+      DynamicQuerys = update_collection_names(Querys, DeviceName),
+      query(TelemetryData, DynamicQuerys);
+    _ ->
+      %% device/status/ 主题已禁用，不再处理设备状态数据
+      %% case binary:match(Topic, <<"device/status/">>) of
+      %%   {0, _} ->
+      %%     StatusData = eventmsg_publish_device_status(Message),
+      %%     DynamicQuerys = update_collection_names(Querys, <<"status">>),
+      %%     query(StatusData, DynamicQuerys);
+      %%   _ ->
+      %%     ok
+      %% end
+      ok
+  end.
 
 
 %% 新增函数：从topic中提取设备名
@@ -110,6 +100,7 @@ update_collection_names(Querys, CollectionName) ->
 
 unload() ->
   unhook('message.publish', {?MODULE, on_message_publish}),
+  catch ets:delete(?PLUGIN_MONGODB_TAB),
   emqx_resource:remove_local(?PLUGIN_MONGODB_RESOURCE_ID).
 
 hook(HookPoint, MFA) ->
@@ -118,12 +109,19 @@ hook(HookPoint, MFA) ->
 unhook(HookPoint, MFA) ->
   emqx_hooks:del(HookPoint, MFA).
 
+ensure_ets_table() ->
+  case ets:info(?PLUGIN_MONGODB_TAB) of
+    undefined ->
+      ets:new(?PLUGIN_MONGODB_TAB, [named_table, public, set, {keypos, 1}, {read_concurrency, true}]);
+    _ ->
+      ets:delete_all_objects(?PLUGIN_MONGODB_TAB)
+  end.
+
 reload() ->
   ets:delete_all_objects(?PLUGIN_MONGODB_TAB),
-  reload(read_config()).
-
-reload(#{topics := Topics}) ->
-  topic_parse(Topics).
+  emqx_resource:stop(?PLUGIN_MONGODB_RESOURCE_ID),
+  emqx_resource:remove_local(?PLUGIN_MONGODB_RESOURCE_ID),
+  load(read_config()).
 
 read_config() ->
   case hocon:load(mongodb_config_file()) of
