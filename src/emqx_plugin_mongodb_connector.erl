@@ -206,6 +206,9 @@ do_send_msg(Pid, Querys, Message) ->
                                 false -> Collection
                             end,
 
+            %% 自动为每个新集合创建 TTL 索引（24小时过期）
+            ensure_ttl_index(Pid, CollectionBin),
+
             %% 检查消息中是否包含_id字段
             case maps:find(<<"_id">>, Message) of
                 {ok, IdValue} ->
@@ -221,3 +224,39 @@ do_send_msg(Pid, Querys, Message) ->
         end,
         Querys
     ).
+
+%% 为新集合自动创建 TTL 索引，time 字段超过 24 小时自动删除文档
+%% 使用 process dictionary 避免重复创建
+ensure_ttl_index(Pid, CollectionBin) ->
+    case get({ttl_index_created, CollectionBin}) of
+        true ->
+            ok;
+        _ ->
+            put({ttl_index_created, CollectionBin}, true),
+            try
+                Command = #{
+                    <<"createIndexes">> => CollectionBin,
+                    <<"indexes">> => [
+                        #{
+                            <<"key">> => #{<<"time">> => 1},
+                            <<"name">> => <<"ttl_time_24h">>,
+                            <<"expireAfterSeconds">> => 86400
+                        }
+                    ]
+                },
+                mongo_api:command(Pid, Command),
+                ?SLOG(info, #{
+                    msg => "ttl_index_created",
+                    collection => CollectionBin,
+                    expire_after_seconds => 86400
+                })
+            catch
+                Error:Reason ->
+                    ?SLOG(warning, #{
+                        msg => "ttl_index_creation_failed",
+                        collection => CollectionBin,
+                        error => Error,
+                        reason => Reason
+                    })
+            end
+    end.
