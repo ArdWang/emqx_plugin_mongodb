@@ -1,19 +1,19 @@
 # emqx_plugin_mongodb
 
-Mongodb plugin for EMQX >= V5.4.0
+EMQX >= V5.4.0 MongoDB 插件
 
-[中文版](README_CN.md)
+[English Version](README.md)
 
-## Usage
+## 使用说明
 
-When using it, be sure to remember that the addition of `.tool-versions` cannot exceed 26 and 3.20.
+使用时请注意，`.tool-versions` 版本不能超过 26 和 3.20。
 
-Replica set name must be "rs0", this is very important, otherwise the plugin will not work.
+副本集名称必须为 `rs0`，否则插件将无法正常工作。
 
-### Release
+### 编译发布
 
-The version compiled by `emqx_plugrel/emqx_plugin_mongodb-0.0.1.tar.gz` is not subject to any restrictions or influences.
-It will automatically read `{relx, [{release, {emqx_plugin_mongodb, "0.2.4"}]` in `rebar.config`.
+编译版本 `emqx_plugrel/emqx_plugin_mongodb-0.0.1.tar.gz` 不受任何限制或影响。
+它会自动读取 `rebar.config` 中的 `{relx, [{release, {emqx_plugin_mongodb, "0.2.4"}]`。
 
 ```shell
 > git clone https://github.com/ArdWang/emqx_plugin_mongodb.git
@@ -21,36 +21,36 @@ It will automatically read `{relx, [{release, {emqx_plugin_mongodb, "0.2.4"}]` i
 > make rel _build/default/emqx_plugrel/emqx_plugin_mongodb-0.0.1.tar.gz
 ```
 
-### Operation
+### 操作界面
 
 <img width="1087" height="597" alt="截屏2025-08-29 14 34 29" src="https://github.com/user-attachments/assets/ea8d589a-4f00-41d7-9d20-86c732626d11" />
 <img width="1075" height="693" alt="截屏2025-08-29 14 34 47" src="https://github.com/user-attachments/assets/e801c86d-757c-40d3-9ffb-40f65a65ef14" />
 <img width="1287" height="896" alt="截屏2025-08-29 14 35 11" src="https://github.com/user-attachments/assets/7a410b6e-17f3-4309-a31b-e0f7f769f754" />
 
-### Config
+### 配置说明
 
-#### Explain
+#### 配置参数
 
 ```shell
 > cat priv/emqx_plugin_mongodb.hocon
 plugin_mongodb {
-  // required
+  // 必填
   connection {
-    // enum: single | sharded | rs
-    // required
+    // 枚举: single | sharded | rs
+    // 必填
     mongo_type = single
 
-    // Following parameters reference https://docs.emqx.com/zh/enterprise/v5.4/admin/api-docs.html#tag/Bridges/paths/~1bridges/post
+    // 以下参数参考 https://docs.emqx.com/zh/enterprise/v5.4/admin/api-docs.html#tag/Bridges/paths/~1bridges/post
     // bridge_mongodb.*
 
-    // If mongo type is 'rs', this field required
+    // 如果 mongo type 为 'rs'，此字段为必填
     replica_set_name = replica_set_name
-    // Mongo server address.
-    // If  mongo type is 'single', only the first host address is used
-    // required
+    // MongoDB 服务器地址
+    // 如果 mongo type 为 'single'，仅使用第一个主机地址
+    // 必填
     bootstrap_hosts = ["10.3.64.223:27017", "10.3.64.223:27018", "10.3.64.223:27019"]
     w_mode = unsafe
-    // required
+    // 必填
     database = "database"
     username = "username"
     password = "password"
@@ -72,14 +72,14 @@ plugin_mongodb {
     health_check_interval = 32s
   }
 
-  // required
+  // 必填
   topics = [
     {
-      // Emqx topic pattern.
-      // 1. Cannot match the system message;
-      // 2. Cannot use filters that start with '+' or '#'.
+      // EMQX 主题模式
+      // 1. 不能匹配系统消息
+      // 2. 不能使用以 '+' 或 '#' 开头的过滤器
       filter = "test/#"
-      // Unique
+      // 唯一标识
       name = emqx_test
       collection = mqtt
     }
@@ -87,14 +87,14 @@ plugin_mongodb {
 }
 ```
 
-Some examples in the directory `priv/example/`.
+更多示例请参考 `priv/example/` 目录。
 
-#### Path
+#### 配置文件路径
 
-- Default path: `emqx/etc/emqx_plugin_mongodb.hocon`
-- Custom path: set system environment variable `export EMQX_PLUGIN_MONGODB_CONF="absolute_path"`
+- 默认路径：`emqx/etc/emqx_plugin_mongodb.hocon`
+- 自定义路径：设置系统环境变量 `export EMQX_PLUGIN_MONGODB_CONF="绝对路径"`
 
-Config:
+配置示例：
 
 ```
 plugin_mongodb {
@@ -169,7 +169,7 @@ plugin_mongodb {
 
 ```
 
-#### Data
+#### 数据格式
 
 ```js
 
@@ -181,7 +181,7 @@ hygro/deviceTelemetry/xxxb8aff43c
 ```
 
 ```js
-temeletry
+遥测数据 (telemetry)
 {
   "_id": 1727334567,
   "name": "xxxb8aff30a",
@@ -192,7 +192,7 @@ temeletry
   "ctc": 0
 }
 
-status
+设备状态 (status)
 {
     "_id": "xxxaff30a"
     "username": "202412200818",
@@ -208,31 +208,31 @@ status
 
 ```
 
-#### TTL Index (24-Hour Auto Expiration)
+#### TTL 索引（24 小时自动过期）
 
-The plugin automatically creates a TTL index for each dynamic device collection, causing data to be automatically deleted after 24 hours.
+插件会自动为每个动态设备集合创建 TTL 索引，使数据在 24 小时后自动删除。
 
-**How it works**:
-- When data is first written to a device collection, a TTL index is automatically created on the `time` field
-- MongoDB periodically scans and deletes documents where the `time` field exceeds 86,400 seconds (24 hours)
-- Rolling window mechanism: the database always retains only the most recent 24 hours of data
+**工作原理**：
+- 当首次向某个设备集合写入数据时，自动在该集合的 `time` 字段上创建 TTL 索引
+- MongoDB 后台定期扫描，删除 `time` 字段值超过 86,400 秒（24 小时）的文档
+- 滚动窗口机制：数据库始终保留最近 24 小时的数据
 
-**Data volume estimation**:
-- Sending one record every 10 seconds → approximately 8,640 records per day
-- Total database volume stays around 8,640 records (slight variations due to MongoDB scan delay)
+**数据量估算**：
+- 发送频率每 10 秒一条 → 每天约 8,640 条数据
+- 数据库总量维持在约 8,640 条左右（因 MongoDB 扫描延迟略有浮动）
 
-**Notes**:
-- The `time` field in the payload must be a **Unix timestamp in seconds** (numeric type) for the TTL index to work correctly
-- Index name is `ttl_time_24h`; adjust `expireAfterSeconds` to change the expiration period
-- If index creation fails (e.g., insufficient permissions), the plugin logs a warning but does not affect data writes
-- Manually check indexes in MongoDB: `db.collectionName.getIndexes()`
+**注意事项**：
+- payload 中的 `time` 字段必须是**秒级 Unix 时间戳**（数字类型），TTL 索引才能正常工作
+- 索引名称为 `ttl_time_24h`，如需调整过期时间可修改 `expireAfterSeconds` 值
+- 如果索引创建失败（如权限不足），插件会记录 warning 日志但不影响数据写入
+- 手动在 MongoDB 中查看索引：`db.集合名.getIndexes()`
 
-#### Reload
+#### 重载配置
 
 ```shell
 // emqx_ctl
 > bin/emqx_ctl emqx_plugin_mongodb
-emqx_plugin_mongodb reload # Reload topics
+emqx_plugin_mongodb reload # 重载主题配置
 > bin/emqx_ctl emqx_plugin_mongodb reload
 topics configuration reload complete.
 ```
