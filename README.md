@@ -115,7 +115,7 @@ plugin_mongodb {
   topics = [
     {
       name = telemetry_topic,
-      filter = "hygro/deviceTelemetry/#",
+      filter = "/hygro/deviceTelemetry/#",
       collection = "placeholder"
     },
     {
@@ -151,7 +151,7 @@ plugin_mongodb {
   topics = [
     {
       name = telemetry_topic,
-      filter = "hygro/deviceTelemetry/#",
+      filter = "/hygro/deviceTelemetry/#",
       collection = "placeholder"
     },
     {
@@ -173,40 +173,26 @@ plugin_mongodb {
 
 ```js
 
-hygro/deviceStatus/xxxxb8aff43c
-hygro/deviceTelemetry/xxxb8aff43c
+/hygro/deviceTelemetry/设备名
+/hygro/deviceStatus/设备名
 
-{"name":"xxxxb8afea0a","ct":29.9,"ch":69.8,"ctc":1.5,"chc":3.0,"time":1718868312}
+{"name":"xxxxb8afea0a","ct":29.9,"ch":69.8,"ctc":1.5,"chc":3.0}
 
 ```
 
 ```js
-temeletry
+telemetry
 {
   "_id": 1727334567,
-  "name": "xxxb8aff30a",
   "time": 1727334567,
   "ct": 33.2,
   "ch": 56.7,
   "chc": 0,
   "ctc": 0
 }
-
-status
-{
-    "_id": "xxxaff30a"
-    "username": "202412200818",
-    "flags":{
-    "dup":false,
-        "retain": false
-},
-    "qos":1,
-    "topic":"test/t1/mongo",
-    "peerhost":"127.0.0.1",
-    "publish_reveived_at":1754984956681
-}
-
 ```
+
+> **注意**: `time` 字段使用 EMQX 系统时间戳（消息到达时的 Unix 时间戳，秒），不从 payload 中提取。
 
 #### TTL Index (24-Hour Auto Expiration)
 
@@ -222,7 +208,7 @@ The plugin automatically creates a TTL index for each dynamic device collection,
 - Total database volume stays around 8,640 records (slight variations due to MongoDB scan delay)
 
 **Notes**:
-- The `time` field in the payload must be a **Unix timestamp in seconds** (numeric type) for the TTL index to work correctly
+- The `time` field uses the EMQX system timestamp (Unix timestamp in seconds) when the message arrives, not extracted from payload
 - Index name is `ttl_time_24h`; adjust `expireAfterSeconds` to change the expiration period
 - If index creation fails (e.g., insufficient permissions), the plugin logs a warning but does not affect data writes
 - Manually check indexes in MongoDB: `db.collectionName.getIndexes()`

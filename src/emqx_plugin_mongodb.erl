@@ -59,7 +59,7 @@ on_message_publish(Message = #message{topic = Topic}) ->
 
 %% 根据topic前缀处理消息
 handle_matched_message(Message, Topic, Querys) ->
-  case binary:match(Topic, <<"device/telemetry/">>) of
+  case binary:match(Topic, <<"/hygro/deviceTelemetry/">>) of
     {0, _} ->
       TelemetryData = eventmsg_publish_telemetry(Message),
       DeviceName = extract_device_name_from_topic(Topic),
@@ -79,14 +79,14 @@ handle_matched_message(Message, Topic, Querys) ->
   end.
 
 
-%% 新增函数：从topic中提取设备名
+%% 从topic中提取设备名
 extract_device_name_from_topic(Topic) ->
-  %% 假设topic格式为: "hygro/deviceTelemetry/设备名"
+  %% topic格式为: "/hygro/deviceTelemetry/设备名"
   Parts = binary:split(Topic, <<"/">>, [global]),
   case length(Parts) of
-    Length when Length >= 3 ->
-      %% 取第三部分作为设备名
-      lists:nth(3, Parts);
+    Length when Length >= 4 ->
+      %% 由于topic以/开头，第一部分是空字符串，设备名在第四部分
+      lists:nth(4, Parts);
     _ ->
       <<"unknown">>
   end.
@@ -309,7 +309,7 @@ parse_payload_to_telemetry(Payload, Timestamp) ->
     JsonData = jsx:decode(Payload, [return_maps]),
 
     %% 提取需要的字段，如果没有则使用默认值
-    Time = maps:get(<<"time">>, JsonData, Timestamp div 1000),
+    Time = Timestamp div 1000,    %% 使用系统时间戳，不接收payload的time
     Ct = maps:get(<<"ct">>, JsonData, 0.0),
     Ch = maps:get(<<"ch">>, JsonData, 0.0),
     Ctc = maps:get(<<"ctc">>, JsonData, 0.0),
@@ -380,13 +380,12 @@ extract_device_name_from_status_topic(Topic) ->
       <<"unknown">>
   end.
 
-%% 新增函数：从payload中提取version和time字段
+%% 从payload中提取version，time使用系统时间戳
 extract_fields_from_payload(Payload, Timestamp) ->
   try
     JsonData = jsx:decode(Payload, [return_maps]),
     Version = maps:get(<<"version">>, JsonData, <<"unknown">>),
-    Time = maps:get(<<"time">>, JsonData, Timestamp div 1000),
-    {Version, Time}
+    {Version, Timestamp div 1000}
   catch
     _:_ ->
       {<<"unknown">>, Timestamp div 1000}
