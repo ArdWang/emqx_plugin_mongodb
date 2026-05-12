@@ -194,22 +194,19 @@ telemetry
 
 > **注意**: `time` 字段使用 EMQX 系统时间戳（消息到达时的 Unix 时间戳，秒），不从 payload 中提取。
 
-#### TTL Index (24-Hour Auto Expiration)
+#### Data Capacity Control (Max 8,400 Documents)
 
-The plugin automatically creates a TTL index for each dynamic device collection, causing data to be automatically deleted after 24 hours.
+The plugin automatically creates an index for each dynamic device collection and removes the oldest records when the limit is exceeded.
 
 **How it works**:
-- When data is first written to a device collection, a TTL index is automatically created on the `time` field
-- MongoDB periodically scans and deletes documents where the `time` field exceeds 86,400 seconds (24 hours)
-- Rolling window mechanism: the database always retains only the most recent 24 hours of data
-
-**Data volume estimation**:
-- Sending one record every 10 seconds → approximately 8,640 records per day
-- Total database volume stays around 8,640 records (slight variations due to MongoDB scan delay)
+- When data is first written to a device collection, a regular index is automatically created on the `time` field
+- After each insert, the plugin checks the total document count in the collection
+- When the count exceeds 8,400 documents, the oldest documents are deleted by `_id` (timestamp) in ascending order until the count returns to 8,400
+- The database always retains the latest 8,400 records
 
 **Notes**:
-- The `time` field uses the EMQX system timestamp (Unix timestamp in seconds) when the message arrives, not extracted from payload
-- Index name is `ttl_time_24h`; adjust `expireAfterSeconds` to change the expiration period
+- The `_id` field is a Unix timestamp in seconds (numeric), used to determine document age
+- The limit `MAX_DOCUMENT_COUNT` is defined in source code `emqx_plugin_mongodb_connector.erl`, and can be adjusted as needed
 - If index creation fails (e.g., insufficient permissions), the plugin logs a warning but does not affect data writes
 - Manually check indexes in MongoDB: `db.collectionName.getIndexes()`
 

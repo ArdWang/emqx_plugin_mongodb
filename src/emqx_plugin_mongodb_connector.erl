@@ -197,6 +197,8 @@ with_log_at_error(Fun, Log) ->
             })
     end.
 
+-define(MAX_DOCUMENT_COUNT, 8400).
+
 do_send_msg(Pid, Querys, Message) ->
     lists:foreach(
         fun({_, Collection}) ->
@@ -206,7 +208,7 @@ do_send_msg(Pid, Querys, Message) ->
                                 false -> Collection
                             end,
 
-            %% 自动为每个新集合创建 TTL 索引（24小时过期）
+            %% 自动为每个新集合创建索引（time 字段，用于排序裁剪）
             ensure_ttl_index(Pid, CollectionBin),
 
             %% 检查消息中是否包含_id字段
@@ -219,13 +221,15 @@ do_send_msg(Pid, Querys, Message) ->
                     mongo_api:update(Pid, CollectionBin, Filter, Update, Options);
                 error ->
                     %% 如果不包含_id，则执行插入操作
-                    mongo_api:insert(Pid, CollectionBin, Message)
+                    mongo_api:insert(Pid, CollectionBin, Message),
+                    %% 插入后检查是否需要裁剪旧数据
+                    prune_old_documents(Pid, CollectionBin)
             end
         end,
         Querys
     ).
 
-%% 为新集合自动创建 TTL 索引，time 字段超过 24 小时自动删除文档
+%% 为新集合创建普通索引（time 字段，用于排序和裁剪）
 %% 使用 process dictionary 避免重复创建
 ensure_ttl_index(Pid, CollectionBin) ->
     case get({ttl_index_created, CollectionBin}) of
@@ -239,24 +243,70 @@ ensure_ttl_index(Pid, CollectionBin) ->
                     <<"indexes">> => [
                         #{
                             <<"key">> => #{<<"time">> => 1},
-                            <<"name">> => <<"ttl_time_24h">>,
-                            <<"expireAfterSeconds">> => 86400
+                            <<"name">> => <<"idx_time">>
                         }
                     ]
                 },
-                mongo_api:command(Pid, Command),
+                mongo_api:command(Pid, Command, 0),
                 ?SLOG(info, #{
-                    msg => "ttl_index_created",
-                    collection => CollectionBin,
-                    expire_after_seconds => 86400
+                    msg => "index_created",
+                    collection => CollectionBin
                 })
             catch
                 Error:Reason ->
                     ?SLOG(warning, #{
-                        msg => "ttl_index_creation_failed",
+                        msg => "index_creation_failed",
                         collection => CollectionBin,
                         error => Error,
                         reason => Reason
                     })
             end
     end.
+
+%% 当文档数超过上限时，删除最旧的文档
+prune_old_documents(Pid, CollectionBin) ->
+    Max = ?MAX_DOCUMENT_COUNT,
+    case mongo_api:count(Pid, CollectionBin, #{}, Max + 1) of
+        Count when is_integer(Count), Count > Max ->
+            %% find 不带排序，获取所有文档后按 _id 排序
+            case mongo_api:find(Pid, CollectionBin, #{}, #{}) of
+                {ok, Cursor} ->
+                    Docs = collect_cursor(Cursor),
+                    %% 按 _id 升序排序（_id = timestamp）
+                    Sorted = lists:sort(
+                        fun(A, B) ->
+                            maps:get(<<"_id">>, A, 0) =< maps:get(<<"_id">>, B, 0)
+                        end, Docs),
+                    ToDelete = lists:sublist(Sorted, Count - Max),
+                    delete_docs(Pid, CollectionBin, ToDelete),
+                    ?SLOG(debug, #{
+                        msg => "pruned_old_documents",
+                        collection => CollectionBin,
+                        deleted => length(ToDelete),
+                        remaining => Max
+                    });
+                _ ->
+                    ok
+            end;
+        _ ->
+            ok
+    end.
+
+collect_cursor(Cursor) ->
+    collect_cursor(Cursor, []).
+
+collect_cursor(Cursor, Acc) ->
+    case mongo_cursor:next(Cursor, 1000) of
+        {ok, Docs} when is_list(Docs), Docs =/= [] ->
+            collect_cursor(Cursor, Acc ++ Docs);
+        _ ->
+            mongo_cursor:close(Cursor),
+            lists:reverse(Acc)
+    end.
+
+delete_docs(_Pid, _CollectionBin, []) ->
+    ok;
+delete_docs(Pid, CollectionBin, [Doc | Rest]) ->
+    DocId = maps:get(<<"_id">>, Doc),
+    mongo_api:delete(Pid, CollectionBin, #{<<"_id">> => DocId}),
+    delete_docs(Pid, CollectionBin, Rest).
