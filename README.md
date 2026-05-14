@@ -196,19 +196,21 @@ telemetry
 
 #### Data Capacity Control (Max 8,400 Documents)
 
-The plugin automatically creates an index for each dynamic device collection and removes the oldest records when the limit is exceeded.
+The plugin automatically creates an index on the `_id` field for each dynamic collection and removes the oldest records when the limit is exceeded, keeping a rolling window of the latest 8,400 documents.
 
 **How it works**:
-- When data is first written to a device collection, a regular index is automatically created on the `time` field
+- When data is first written to a collection, an index is automatically created on the `_id` field (ascending)
 - After each insert, the plugin checks the total document count in the collection
-- When the count exceeds 8,400 documents, the oldest documents are deleted by `_id` (timestamp) in ascending order until the count returns to 8,400
+- When the count exceeds 8,400, a MongoDB `find` command with `sort: {_id: 1}` and `limit: N` is used to fetch only the IDs of the N oldest documents — no full scan or in-memory sorting
+- A single `$in` batch delete removes all old documents at once
 - The database always retains the latest 8,400 records
 
 **Notes**:
 - The `_id` field is a Unix timestamp in seconds (numeric), used to determine document age
-- The limit `MAX_DOCUMENT_COUNT` is defined in source code `emqx_plugin_mongodb_connector.erl`, and can be adjusted as needed
-- If index creation fails (e.g., insufficient permissions), the plugin logs a warning but does not affect data writes
+- The limit `MAX_DOCUMENT_COUNT` is defined in `emqx_plugin_mongodb_connector.erl` and can be adjusted as needed
+- If index creation fails, the plugin logs a debug message; data writes are not affected
 - Manually check indexes in MongoDB: `db.collectionName.getIndexes()`
+- Only applies to `insert` operations; `upsert` (update) does not trigger pruning
 
 #### Reload
 

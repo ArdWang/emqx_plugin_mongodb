@@ -208,8 +208,8 @@ do_send_msg(Pid, Querys, Message) ->
                                 false -> Collection
                             end,
 
-            %% 自动为每个新集合创建索引（time 字段，用于排序裁剪）
-            ensure_ttl_index(Pid, CollectionBin),
+            %% 自动为每个新集合创建 _id 索引（用于排序裁剪）
+            ensure_id_index(Pid, CollectionBin),
 
             %% 检查消息中是否包含_id字段
             case maps:find(<<"_id">>, Message) of
@@ -229,21 +229,21 @@ do_send_msg(Pid, Querys, Message) ->
         Querys
     ).
 
-%% 为新集合创建普通索引（time 字段，用于排序和裁剪）
+%% 为新集合创建 _id 升序索引（用于 prune 时的排序）
 %% 使用 process dictionary 避免重复创建
-ensure_ttl_index(Pid, CollectionBin) ->
-    case get({ttl_index_created, CollectionBin}) of
+ensure_id_index(Pid, CollectionBin) ->
+    case get({id_index_created, CollectionBin}) of
         true ->
             ok;
         _ ->
-            put({ttl_index_created, CollectionBin}, true),
+            put({id_index_created, CollectionBin}, true),
             try
                 Command = #{
                     <<"createIndexes">> => CollectionBin,
                     <<"indexes">> => [
                         #{
-                            <<"key">> => #{<<"time">> => 1},
-                            <<"name">> => <<"idx_time">>
+                            <<"key">> => #{<<"_id">> => 1},
+                            <<"name">> => <<"idx_id">>
                         }
                     ]
                 },
@@ -254,8 +254,9 @@ ensure_ttl_index(Pid, CollectionBin) ->
                 })
             catch
                 Error:Reason ->
-                    ?SLOG(warning, #{
-                        msg => "index_creation_failed",
+                    %% 索引可能已存在，忽略错误
+                    ?SLOG(debug, #{
+                        msg => "index_creation_skipped_or_failed",
                         collection => CollectionBin,
                         error => Error,
                         reason => Reason
@@ -264,49 +265,43 @@ ensure_ttl_index(Pid, CollectionBin) ->
     end.
 
 %% 当文档数超过上限时，删除最旧的文档
+%% 使用 MongoDB find command 的 sort + limit，避免全量拉取到内存
 prune_old_documents(Pid, CollectionBin) ->
     Max = ?MAX_DOCUMENT_COUNT,
     case mongo_api:count(Pid, CollectionBin, #{}, Max + 1) of
         Count when is_integer(Count), Count > Max ->
-            %% find 不带排序，获取所有文档后按 _id 排序
-            case mongo_api:find(Pid, CollectionBin, #{}, #{}) of
-                {ok, Cursor} ->
-                    Docs = collect_cursor(Cursor),
-                    %% 按 _id 升序排序（_id = timestamp）
-                    Sorted = lists:sort(
-                        fun(A, B) ->
-                            maps:get(<<"_id">>, A, 0) =< maps:get(<<"_id">>, B, 0)
-                        end, Docs),
-                    ToDelete = lists:sublist(Sorted, Count - Max),
-                    delete_docs(Pid, CollectionBin, ToDelete),
-                    ?SLOG(debug, #{
-                        msg => "pruned_old_documents",
+            N = Count - Max,
+            %% 使用 MongoDB find command，带 sort 和 limit，只取最旧的 N 条
+            FindCmd = #{
+                <<"find">> => CollectionBin,
+                <<"filter">> => #{},
+                <<"sort">> => #{<<"_id">> => 1},
+                <<"limit">> => N,
+                <<"projection">> => #{<<"_id">> => 1}
+            },
+            %% mongo_api:command returns {true, Map} or {false, Map}
+            case mongo_api:command(Pid, FindCmd, 0) of
+                {true, #{<<"cursor">> := #{<<"firstBatch">> := Batch}}} when is_list(Batch) ->
+                    IdList = [maps:get(<<"_id">>, Doc) || Doc <- Batch],
+                    case IdList of
+                        [] -> ok;
+                        _ ->
+                            %% 使用 $in 批量删除，一次搞定
+                            mongo_api:delete(Pid, CollectionBin, #{<<"_id">> => #{<<"$in">> => IdList}}),
+                            ?SLOG(debug, #{
+                                msg => "pruned_old_documents",
+                                collection => CollectionBin,
+                                deleted => length(IdList),
+                                count_before => Count
+                            })
+                    end;
+                _Other ->
+                    ?SLOG(warning, #{
+                        msg => "prune_find_command_failed",
                         collection => CollectionBin,
-                        deleted => length(ToDelete),
-                        remaining => Max
-                    });
-                _ ->
-                    ok
+                        result => _Other
+                    })
             end;
         _ ->
             ok
     end.
-
-collect_cursor(Cursor) ->
-    collect_cursor(Cursor, []).
-
-collect_cursor(Cursor, Acc) ->
-    case mongo_cursor:next(Cursor, 1000) of
-        {ok, Docs} when is_list(Docs), Docs =/= [] ->
-            collect_cursor(Cursor, Acc ++ Docs);
-        _ ->
-            mongo_cursor:close(Cursor),
-            lists:reverse(Acc)
-    end.
-
-delete_docs(_Pid, _CollectionBin, []) ->
-    ok;
-delete_docs(Pid, CollectionBin, [Doc | Rest]) ->
-    DocId = maps:get(<<"_id">>, Doc),
-    mongo_api:delete(Pid, CollectionBin, #{<<"_id">> => DocId}),
-    delete_docs(Pid, CollectionBin, Rest).
