@@ -308,16 +308,19 @@ parse_payload_to_telemetry(Payload, Timestamp) ->
   try
     JsonData = jsx:decode(Payload, [return_maps]),
 
-    %% 提取需要的字段，如果没有则使用默认值
-    Time = Timestamp div 1000,    %% 使用系统时间戳，不接收payload的time
+    %% time 字段必须使用 BSON 日期类型（{MegaSecs, Secs, MicroSecs}），
+    %% 否则 MongoDB 的 TTL 索引不会生效，超过 24 小时的数据不会被自动删除。
+    TimeSecs = Timestamp div 1000,
+    Time = bson:secs_to_unixtime(TimeSecs),
     Ct = maps:get(<<"ct">>, JsonData, 0.0),
     Ch = maps:get(<<"ch">>, JsonData, 0.0),
     Ctc = maps:get(<<"ctc">>, JsonData, 0.0),
     Chc = maps:get(<<"chc">>, JsonData, 0.0),
 
     %% 构建telemetry格式的数据
+    %% _id 仍然使用整数秒时间戳，作为 upsert 的唯一键（同一秒内的数据会被替换）
     #{
-      <<"_id">> => Timestamp div 1000,
+      <<"_id">> => TimeSecs,
       <<"time">> => Time,
       <<"ct">> => Ct,
       <<"ch">> => Ch,
@@ -327,9 +330,10 @@ parse_payload_to_telemetry(Payload, Timestamp) ->
   catch
     _:_ ->
       %% 如果解析失败，返回默认值
+      TimeSecsFallback = Timestamp div 1000,
       #{
-        <<"_id">> => Timestamp div 1000,
-        <<"time">> => Timestamp div 1000,
+        <<"_id">> => TimeSecsFallback,
+        <<"time">> => bson:secs_to_unixtime(TimeSecsFallback),
         <<"ct">> => 0.0,
         <<"ch">> => 0.0,
         <<"ctc">> => 0.0,
